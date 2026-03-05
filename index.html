@@ -1,504 +1,534 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Trophy, Users, CheckCircle, EyeOff, Award, 
-  ShieldCheck, Send, AlertCircle, BarChart3, Edit3
-} from 'lucide-react';
-
-// --- MOCK DATA ---
-const EMPLOYEES = [
-  { id: 'e1', name: 'Alice Chen', role: 'Software Engineer', dept: 'Engineering' },
-  { id: 'e2', name: 'Bob Smith', role: 'Product Manager', dept: 'Product' },
-  { id: 'e3', name: 'Charlie Davis', role: 'Customer Success', dept: 'Support' },
-  { id: 'e4', name: 'Diana Prince', role: 'Marketing Lead', dept: 'Marketing' },
-  { id: 'e5', name: 'Evan Wright', role: 'Operations Specialist', dept: 'Operations' },
-];
-
-const CATEGORIES = [
-  { id: 'op_ex', name: 'Operational Excellence', desc: 'Exceptional operational efficiency, proactive problem-solving, leading to cost savings.' },
-  { id: 'innov', name: 'Innovation and Creativity', desc: 'Innovative ideas or creative solutions that significantly improve processes or products.' },
-  { id: 'lead', name: 'Leadership', desc: 'Demonstrates leadership by mentoring and supporting others.' },
-  { id: 'team', name: 'Team Work', desc: 'Strong collaboration, effective communication, fostering a positive team environment.' },
-  { id: 'cust', name: 'Customer Satisfaction', desc: 'Outstanding customer service leading to great satisfaction and positive feedback.' },
-];
-
-export default function WegoMVPDashboard() {
-  // --- STATE ---
-  const [activeRole, setActiveRole] = useState('Employee'); // Employee, HR Admin, Leader, Public
-  const [currentUser, setCurrentUser] = useState(EMPLOYEES[0]);
-  const [nominations, setNominations] = useState([]);
-  
-  // --- FORM STATE ---
-  const [nomineeId, setNomineeId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [reason, setReason] = useState('');
-  const [formError, setFormError] = useState('');
-
-  // --- HR VALIDATION STATE ---
-  const [editingNomination, setEditingNomination] = useState(null);
-  const [redactedText, setRedactedText] = useState('');
-
-  // --- HELPERS ---
-  const hasNominated = nominations.some(n => n.nominatorId === currentUser.id);
-  
-  const handleNominate = (e) => {
-    e.preventDefault();
-    setFormError('');
-
-    if (hasNominated) {
-      setFormError('SOP Rule: You can only nominate ONE employee per cycle.');
-      return;
-    }
-    if (nomineeId === currentUser.id) {
-      setFormError('You cannot nominate yourself.');
-      return;
-    }
-    
-    // Check if nominee is already nominated for another category
-    const existingNomination = nominations.find(n => n.nomineeId === nomineeId);
-    if (existingNomination && existingNomination.categoryId !== categoryId) {
-      setFormError(`SOP Rule: ${EMPLOYEES.find(e => e.id === nomineeId)?.name} is already nominated for ${CATEGORIES.find(c => c.id === existingNomination.categoryId)?.name}. Employees can only be nominated for one category per cycle.`);
-      return;
-    }
-
-    const newNomination = {
-      id: `nom_${Date.now()}`,
-      nominatorId: currentUser.id,
-      nomineeId,
-      categoryId,
-      reason,
-      status: 'pending', // pending, approved, rejected
-      redactedReason: '', // To be filled by HR
-      votes: 0
-    };
-
-    setNominations([...nominations, newNomination]);
-    setNomineeId('');
-    setCategoryId('');
-    setReason('');
-  };
-
-  const handleHRApprove = (id) => {
-    setNominations(nominations.map(n => 
-      n.id === id ? { ...n, status: 'approved', redactedReason: redactedText || n.reason } : n
-    ));
-    setEditingNomination(null);
-    setRedactedText('');
-  };
-
-  const handleHRReject = (id) => {
-    setNominations(nominations.map(n => 
-      n.id === id ? { ...n, status: 'rejected' } : n
-    ));
-    setEditingNomination(null);
-  };
-
-  const handleVote = (nominationId) => {
-    // In a real app, track who voted so leaders can't vote multiple times.
-    // For MVP, simple increment.
-    setNominations(nominations.map(n => 
-      n.id === nominationId ? { ...n, votes: n.votes + 1 } : n
-    ));
-  };
-
-  // --- DERIVED DATA ---
-  const pendingNominations = nominations.filter(n => n.status === 'pending');
-  const approvedNominations = nominations.filter(n => n.status === 'approved');
-  
-  const winnersByCategory = useMemo(() => {
-    const winners = {};
-    CATEGORIES.forEach(cat => {
-      const catNoms = approvedNominations.filter(n => n.categoryId === cat.id);
-      if (catNoms.length > 0) {
-        // Find the one with max votes
-        const winner = catNoms.reduce((max, current) => (current.votes > max.votes ? current : max), catNoms[0]);
-        if (winner.votes > 0) {
-           winners[cat.id] = winner;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wego MVP Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .animate-in {
+            animation: fadeIn 0.5s ease-out;
         }
-      }
-    });
-    return winners;
-  }, [approvedNominations]);
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Custom scrollbar for textareas */
+        textarea::-webkit-scrollbar { width: 8px; }
+        textarea::-webkit-scrollbar-track { background: transparent; }
+        textarea::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-900 min-h-screen">
+    <div id="app"></div>
 
+    <script>
+        // --- MOCK DATA ---
+        const EMPLOYEES = [
+            { id: 'e1', name: 'Alice Chen', role: 'Software Engineer', dept: 'Engineering' },
+            { id: 'e2', name: 'Bob Smith', role: 'Product Manager', dept: 'Product' },
+            { id: 'e3', name: 'Charlie Davis', role: 'Customer Success', dept: 'Support' },
+            { id: 'e4', name: 'Diana Prince', role: 'Marketing Lead', dept: 'Marketing' },
+            { id: 'e5', name: 'Evan Wright', role: 'Operations Specialist', dept: 'Operations' },
+        ];
 
-  // --- SUB-COMPONENTS ---
-  const renderEmployeeView = () => (
-    <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Send className="w-6 h-6 text-indigo-600" />
-          Submit a Nomination
-        </h2>
-        <p className="text-slate-500 mt-2">Recognize a peer, direct report, or cross-functional team member for their outstanding contributions.</p>
-      </div>
+        const CATEGORIES = [
+            { id: 'op_ex', name: 'Operational Excellence', desc: 'Exceptional operational efficiency, proactive problem-solving, leading to cost savings.' },
+            { id: 'innov', name: 'Innovation and Creativity', desc: 'Innovative ideas or creative solutions that significantly improve processes or products.' },
+            { id: 'lead', name: 'Leadership', desc: 'Demonstrates leadership by mentoring and supporting others.' },
+            { id: 'team', name: 'Team Work', desc: 'Strong collaboration, effective communication, fostering a positive team environment.' },
+            { id: 'cust', name: 'Customer Satisfaction', desc: 'Outstanding customer service leading to great satisfaction and positive feedback.' },
+        ];
 
-      {hasNominated ? (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-6 rounded-lg flex flex-col items-center justify-center text-center">
-          <CheckCircle className="w-12 h-12 text-emerald-500 mb-3" />
-          <h3 className="font-semibold text-lg">Nomination Submitted</h3>
-          <p className="text-sm mt-1">Thank you! You have successfully submitted your nomination for this cycle. As per SOP30, you may only nominate one person per cycle.</p>
-        </div>
-      ) : (
-        <form onSubmit={handleNominate} className="space-y-5">
-          {formError && (
-            <div className="bg-red-50 text-red-700 p-3 rounded-md flex items-start gap-2 text-sm">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>{formError}</p>
-            </div>
-          )}
+        // --- GLOBAL STATE ---
+        let state = {
+            activeRole: 'Employee', // Employee, HR Admin, Leader, Results
+            currentUser: EMPLOYEES[0],
+            nominations: [],
+            form: {
+                nomineeId: '',
+                categoryId: '',
+                reason: '',
+                error: ''
+            },
+            hr: {
+                editingNomination: null,
+                redactedText: ''
+            }
+        };
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Select Nominee</label>
-            <select 
-              required
-              value={nomineeId} 
-              onChange={(e) => setNomineeId(e.target.value)}
-              className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="">-- Select an employee --</option>
-              {EMPLOYEES.map(emp => (
-                <option key={emp.id} value={emp.id} disabled={emp.id === currentUser.id}>
-                  {emp.name} ({emp.dept}) {emp.id === currentUser.id ? '- You' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+        // --- ACTIONS ---
+        function setActiveRole(role) {
+            state.activeRole = role;
+            render();
+        }
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Reward Category</label>
-            <div className="grid grid-cols-1 gap-3">
-              {CATEGORIES.map(cat => (
-                <label key={cat.id} className={`flex items-start p-3 border rounded-lg cursor-pointer transition-colors ${categoryId === cat.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'}`}>
-                  <input 
-                    type="radio" 
-                    name="category" 
-                    value={cat.id}
-                    checked={categoryId === cat.id}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                    className="mt-1 text-indigo-600 focus:ring-indigo-500"
-                    required
-                  />
-                  <div className="ml-3">
-                    <span className="block text-sm font-semibold text-slate-900">{cat.name}</span>
-                    <span className="block text-xs text-slate-500 mt-0.5">{cat.desc}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
+        function setCurrentUser(id) {
+            state.currentUser = EMPLOYEES.find(emp => emp.id === id);
+            render();
+        }
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Reason for Nomination</label>
-            <textarea 
-              required
-              rows="4"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Describe why this person deserves the Wego MVP award. Provide specific examples of their work."
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-            ></textarea>
-          </div>
+        function handleNominate(e) {
+            e.preventDefault();
+            state.form.error = '';
 
-          <button 
-            type="submit"
-            className="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Submit Nomination
-          </button>
-        </form>
-      )}
-    </div>
-  );
+            const hasNominated = state.nominations.some(n => n.nominatorId === state.currentUser.id);
+            if (hasNominated) {
+                state.form.error = 'SOP Rule: You can only nominate ONE employee per cycle.';
+                render();
+                return;
+            }
 
-  const renderHRView = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-indigo-600" />
-            HR Validation & Redaction
-          </h2>
-          <p className="text-slate-500 mt-1">Review nominations, ensure eligibility, and redact identifying info for blind voting.</p>
-        </div>
-        <div className="bg-slate-100 px-4 py-2 rounded-lg text-sm font-medium text-slate-600">
-          Pending: {pendingNominations.length}
-        </div>
-      </div>
+            if (state.form.nomineeId === state.currentUser.id) {
+                state.form.error = 'You cannot nominate yourself.';
+                render();
+                return;
+            }
 
-      {pendingNominations.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-slate-200 border-dashed">
-          <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-slate-900">All caught up!</h3>
-          <p className="text-slate-500">No pending nominations to review at this time.</p>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {pendingNominations.map(nom => {
-            const nominator = EMPLOYEES.find(e => e.id === nom.nominatorId);
-            const nominee = EMPLOYEES.find(e => e.id === nom.nomineeId);
-            const category = CATEGORIES.find(c => c.id === nom.categoryId);
-            const isEditing = editingNomination === nom.id;
+            const existingNomination = state.nominations.find(n => n.nomineeId === state.form.nomineeId);
+            if (existingNomination && existingNomination.categoryId !== state.form.categoryId) {
+                const nomineeName = EMPLOYEES.find(e => e.id === state.form.nomineeId)?.name;
+                const catName = CATEGORIES.find(c => c.id === existingNomination.categoryId)?.name;
+                state.form.error = `SOP Rule: ${nomineeName} is already nominated for ${catName}. Employees can only be nominated for one category per cycle.`;
+                render();
+                return;
+            }
 
-            return (
-              <div key={nom.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-semibold text-lg text-slate-900">Nominee: {nominee?.name}</h3>
-                    <p className="text-sm text-slate-500">Nominated by: {nominator?.name} • Category: <span className="font-medium text-indigo-600">{category?.name}</span></p>
-                  </div>
-                </div>
+            const newNomination = {
+                id: `nom_${Date.now()}`,
+                nominatorId: state.currentUser.id,
+                nomineeId: state.form.nomineeId,
+                categoryId: state.form.categoryId,
+                reason: state.form.reason,
+                status: 'pending',
+                redactedReason: '',
+                votes: 0
+            };
 
-                {isEditing ? (
-                  <div className="space-y-3 bg-amber-50 p-4 rounded-lg border border-amber-200">
-                    <div className="flex items-center gap-2 text-amber-800 mb-2">
-                      <EyeOff className="w-5 h-5" />
-                      <span className="font-semibold">Redact Identifiers</span>
-                    </div>
-                    <p className="text-xs text-amber-700 mb-2">Original text: "{nom.reason}"</p>
-                    <textarea
-                      rows="3"
-                      value={redactedText}
-                      onChange={(e) => setRedactedText(e.target.value)}
-                      className="w-full p-2 text-sm border border-amber-300 rounded focus:ring-2 focus:ring-amber-500"
-                      placeholder="Rewrite reason removing names, genders, and specific project names..."
-                    />
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => handleHRApprove(nom.id)}
-                        className="bg-amber-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-amber-700"
-                      >
-                        Approve & Save Redacted Text
-                      </button>
-                      <button 
-                        onClick={() => setEditingNomination(null)}
-                        className="bg-white text-slate-600 px-4 py-2 rounded text-sm font-medium border hover:bg-slate-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-slate-50 p-3 rounded-lg text-slate-700 text-sm mb-4 border border-slate-100">
-                      "{nom.reason}"
-                    </div>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => {
-                          setEditingNomination(nom.id);
-                          setRedactedText(nom.reason); // Prefill to allow easy editing
-                        }}
-                        className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors"
-                      >
-                        <Edit3 className="w-4 h-4" /> Prepare & Approve
-                      </button>
-                      <button 
-                         onClick={() => handleHRReject(nom.id)}
-                        className="text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
-                      >
-                        Reject (Ineligible)
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+            state.nominations.push(newNomination);
+            state.form = { nomineeId: '', categoryId: '', reason: '', error: '' };
+            render();
+        }
 
-  const renderLeaderBoard = () => (
-    <div className="space-y-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <EyeOff className="w-6 h-6 text-indigo-600" />
-          Blind Voting Board
-        </h2>
-        <p className="text-slate-500 mt-1">Review redacted nominations and vote for the best candidate in each category.</p>
-      </div>
+        function setFormNominee(id) { state.form.nomineeId = id; render(); }
+        function setFormCategory(id) { state.form.categoryId = id; render(); }
+        function setFormReason(text) { state.form.reason = text; } // Don't re-render on every keystroke to avoid losing focus, value updated via DOM
+        function updateReasonOnBlur(e) { state.form.reason = e.target.value; }
 
-      {CATEGORIES.map(category => {
-        const catNoms = approvedNominations.filter(n => n.categoryId === category.id);
-        
-        return (
-          <div key={category.id} className="mb-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-              <h3 className="text-lg font-bold text-slate-800">{category.name}</h3>
-              <p className="text-sm text-slate-500">{category.desc}</p>
-            </div>
+        function startEditingNomination(id, reason) {
+            state.hr.editingNomination = id;
+            state.hr.redactedText = reason;
+            render();
+        }
+
+        function cancelEditingNomination() {
+            state.hr.editingNomination = null;
+            state.hr.redactedText = '';
+            render();
+        }
+
+        function updateRedactedText(text) { state.hr.redactedText = text; }
+
+        function approveNomination(id) {
+            const nom = state.nominations.find(n => n.id === id);
+            if (nom) {
+                nom.status = 'approved';
+                nom.redactedReason = state.hr.redactedText || nom.reason;
+            }
+            state.hr.editingNomination = null;
+            state.hr.redactedText = '';
+            render();
+        }
+
+        function rejectNomination(id) {
+            const nom = state.nominations.find(n => n.id === id);
+            if (nom) nom.status = 'rejected';
+            state.hr.editingNomination = null;
+            render();
+        }
+
+        function voteCandidate(id) {
+            const nom = state.nominations.find(n => n.id === id);
+            if (nom) nom.votes += 1;
+            render();
+        }
+
+        // --- DERIVED DATA ---
+        function getPendingNominations() { return state.nominations.filter(n => n.status === 'pending'); }
+        function getApprovedNominations() { return state.nominations.filter(n => n.status === 'approved'); }
+        function getWinnersByCategory() {
+            const winners = {};
+            const approved = getApprovedNominations();
+            CATEGORIES.forEach(cat => {
+                const catNoms = approved.filter(n => n.categoryId === cat.id);
+                if (catNoms.length > 0) {
+                    const winner = catNoms.reduce((max, current) => (current.votes > max.votes ? current : max), catNoms[0]);
+                    if (winner.votes > 0) winners[cat.id] = winner;
+                }
+            });
+            return winners;
+        }
+
+        // --- VIEWS ---
+        function renderHeader() {
+            const roles = ['Employee', 'HR Admin', 'Leader', 'Results'];
             
-            <div className="p-6">
-              {catNoms.length === 0 ? (
-                <p className="text-slate-400 italic text-sm">No approved nominations for this category yet.</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {catNoms.map((nom, idx) => (
-                    <div key={nom.id} className="border border-slate-200 rounded-lg p-5 relative group hover:border-indigo-300 transition-colors">
-                      <div className="flex justify-between items-start mb-3">
-                        <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
-                          Candidate {idx + 1}
-                        </span>
-                        <div className="text-sm font-semibold text-slate-500 flex items-center gap-1">
-                           <BarChart3 className="w-4 h-4" /> {nom.votes} Votes
+            return `
+            <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+                <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center h-16">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="trophy" class="w-8 h-8 text-indigo-600"></i>
+                            <span class="text-xl font-extrabold tracking-tight text-slate-900">Wego MVP</span>
                         </div>
-                      </div>
-                      <p className="text-slate-700 text-sm mb-5 italic">
-                        "{nom.redactedReason}"
-                      </p>
-                      <button 
-                        onClick={() => handleVote(nom.id)}
-                        className="w-full bg-white border border-indigo-600 text-indigo-600 font-medium py-2 rounded-md hover:bg-indigo-50 transition-colors"
-                      >
-                        Vote for Candidate {idx + 1}
-                      </button>
+                        
+                        <div class="flex items-center gap-4 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+                            <select 
+                                onchange="setCurrentUser(this.value)"
+                                class="text-xs bg-white border border-slate-300 rounded px-2 py-1 font-medium text-slate-700"
+                            >
+                                ${EMPLOYEES.map(emp => `<option value="${emp.id}" ${state.currentUser.id === emp.id ? 'selected' : ''}>Act as: ${emp.name}</option>`).join('')}
+                            </select>
+                            
+                            <div class="flex gap-1">
+                                ${roles.map(role => `
+                                    <button
+                                        onclick="setActiveRole('${role}')"
+                                        class="px-3 py-1 rounded text-xs font-bold transition-all ${state.activeRole === role ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200'}"
+                                    >${role}</button>
+                                `).join('')}
+                            </div>
+                        </div>
                     </div>
-                  ))}
                 </div>
-              )}
+            </header>
+            `;
+        }
+
+        function renderContext() {
+            let title = '', desc = '';
+            if (state.activeRole === 'Employee') {
+                title = `Welcome, ${state.currentUser.name}`;
+                desc = 'Participate in the bi-annual RnR cycle.';
+            } else if (state.activeRole === 'HR Admin') {
+                title = 'HR Operations Dashboard';
+                desc = 'Validate entries based on SOP30 Guidelines.';
+            } else if (state.activeRole === 'Leader') {
+                title = 'Function Leader Voting';
+                desc = 'Review blind applications to remove bias.';
+            } else if (state.activeRole === 'Results') {
+                title = 'Bi-Annual Awards Celebration';
+                desc = 'Recognizing excellence across all departments.';
+            }
+
+            return `
+            <div class="mb-8 border-b border-slate-200 pb-4">
+                <h1 class="text-3xl font-bold text-slate-900">${title}</h1>
+                <p class="text-slate-500 mt-1">${desc}</p>
             </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+            `;
+        }
 
-  const renderResults = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-extrabold text-slate-900 flex items-center justify-center gap-3">
-          <Trophy className="w-8 h-8 text-yellow-500" />
-          Wego MVP Awards
-        </h2>
-        <p className="text-slate-500 mt-2 max-w-xl mx-auto">Celebrating the outstanding contributions of our team members. Each winner receives a $300 reward!</p>
-      </div>
+        function renderEmployeeView() {
+            const hasNominated = state.nominations.some(n => n.nominatorId === state.currentUser.id);
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {CATEGORIES.map(category => {
-          const winnerNom = winnersByCategory[category.id];
-          const winnerEmp = winnerNom ? EMPLOYEES.find(e => e.id === winnerNom.nomineeId) : null;
+            if (hasNominated) {
+                return `
+                <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="send" class="w-6 h-6 text-indigo-600"></i> Submit a Nomination
+                        </h2>
+                    </div>
+                    <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 p-6 rounded-lg flex flex-col items-center justify-center text-center">
+                        <i data-lucide="check-circle" class="w-12 h-12 text-emerald-500 mb-3"></i>
+                        <h3 class="font-semibold text-lg">Nomination Submitted</h3>
+                        <p class="text-sm mt-1">Thank you! You have successfully submitted your nomination for this cycle. As per SOP30, you may only nominate one person per cycle.</p>
+                    </div>
+                </div>`;
+            }
 
-          return (
-            <div key={category.id} className={`rounded-2xl p-6 shadow-sm border relative overflow-hidden ${winnerEmp ? 'bg-gradient-to-b from-white to-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
-              {winnerEmp && (
-                <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1 shadow-sm">
-                  <Award className="w-3 h-3" /> $300 Prize
+            return `
+            <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="send" class="w-6 h-6 text-indigo-600"></i> Submit a Nomination
+                    </h2>
+                    <p class="text-slate-500 mt-2">Recognize a peer, direct report, or cross-functional team member for their outstanding contributions.</p>
                 </div>
-              )}
-              
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">{category.name}</h3>
-              
-              {winnerEmp ? (
-                <div className="text-center py-4">
-                  <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-md">
-                    <span className="text-2xl font-bold text-indigo-600">{winnerEmp.name.charAt(0)}</span>
-                  </div>
-                  <h4 className="text-xl font-bold text-slate-900">{winnerEmp.name}</h4>
-                  <p className="text-sm text-slate-500 mb-4">{winnerEmp.role}</p>
-                  
-                  <div className="bg-white/60 p-3 rounded-lg text-sm text-slate-700 italic border border-amber-100 line-clamp-3">
-                    "{winnerNom.reason}"
-                  </div>
+                
+                <form onsubmit="handleNominate(event)" class="space-y-5">
+                    ${state.form.error ? `
+                    <div class="bg-red-50 text-red-700 p-3 rounded-md flex items-start gap-2 text-sm">
+                        <i data-lucide="alert-circle" class="w-5 h-5 shrink-0"></i>
+                        <p>${state.form.error}</p>
+                    </div>` : ''}
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Select Nominee</label>
+                        <select required onchange="setFormNominee(this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="">-- Select an employee --</option>
+                            ${EMPLOYEES.map(emp => `
+                                <option value="${emp.id}" ${emp.id === state.currentUser.id ? 'disabled' : ''} ${state.form.nomineeId === emp.id ? 'selected' : ''}>
+                                    ${emp.name} (${emp.dept}) ${emp.id === state.currentUser.id ? '- You' : ''}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Reward Category</label>
+                        <div class="grid grid-cols-1 gap-3">
+                            ${CATEGORIES.map(cat => `
+                                <label class="flex items-start p-3 border rounded-lg cursor-pointer transition-colors ${state.form.categoryId === cat.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50'}">
+                                    <input type="radio" name="category" value="${cat.id}" required onchange="setFormCategory(this.value)" ${state.form.categoryId === cat.id ? 'checked' : ''} class="mt-1 text-indigo-600 focus:ring-indigo-500" />
+                                    <div class="ml-3">
+                                        <span class="block text-sm font-semibold text-slate-900">${cat.name}</span>
+                                        <span class="block text-xs text-slate-500 mt-0.5">${cat.desc}</span>
+                                    </div>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Reason for Nomination</label>
+                        <textarea required rows="4" onblur="updateReasonOnBlur(event)" placeholder="Describe why this person deserves the Wego MVP award. Provide specific examples of their work." class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none">${state.form.reason}</textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">
+                        Submit Nomination
+                    </button>
+                </form>
+            </div>`;
+        }
+
+        function renderHRView() {
+            const pending = getPendingNominations();
+
+            let content = '';
+            if (pending.length === 0) {
+                content = `
+                <div class="text-center py-12 bg-white rounded-xl border border-slate-200 border-dashed">
+                    <i data-lucide="check-circle" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                    <h3 class="text-lg font-medium text-slate-900">All caught up!</h3>
+                    <p class="text-slate-500">No pending nominations to review at this time.</p>
+                </div>`;
+            } else {
+                content = `<div class="grid gap-4">` + pending.map(nom => {
+                    const nominator = EMPLOYEES.find(e => e.id === nom.nominatorId);
+                    const nominee = EMPLOYEES.find(e => e.id === nom.nomineeId);
+                    const category = CATEGORIES.find(c => c.id === nom.categoryId);
+                    const isEditing = state.hr.editingNomination === nom.id;
+
+                    if (isEditing) {
+                        return `
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="font-semibold text-lg text-slate-900">Nominee: ${nominee?.name}</h3>
+                                    <p class="text-sm text-slate-500">Nominated by: ${nominator?.name} • Category: <span class="font-medium text-indigo-600">${category?.name}</span></p>
+                                </div>
+                            </div>
+                            <div class="space-y-3 bg-amber-50 p-4 rounded-lg border border-amber-200">
+                                <div class="flex items-center gap-2 text-amber-800 mb-2">
+                                    <i data-lucide="eye-off" class="w-5 h-5"></i> <span class="font-semibold">Redact Identifiers</span>
+                                </div>
+                                <p class="text-xs text-amber-700 mb-2">Original text: "${nom.reason}"</p>
+                                <textarea rows="3" oninput="updateRedactedText(this.value)" class="w-full p-2 text-sm border border-amber-300 rounded focus:ring-2 focus:ring-amber-500" placeholder="Rewrite reason removing names, genders...">${state.hr.redactedText}</textarea>
+                                <div class="flex gap-2 mt-2">
+                                    <button onclick="approveNomination('${nom.id}')" class="bg-amber-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-amber-700">Approve & Save</button>
+                                    <button onclick="cancelEditingNomination()" class="bg-white text-slate-600 px-4 py-2 rounded text-sm font-medium border hover:bg-slate-50">Cancel</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    } else {
+                        return `
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="font-semibold text-lg text-slate-900">Nominee: ${nominee?.name}</h3>
+                                    <p class="text-sm text-slate-500">Nominated by: ${nominator?.name} • Category: <span class="font-medium text-indigo-600">${category?.name}</span></p>
+                                </div>
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-lg text-slate-700 text-sm mb-4 border border-slate-100">"${nom.reason}"</div>
+                            <div class="flex gap-2">
+                                <button onclick="startEditingNomination('${nom.id}', \`${nom.reason.replace(/`/g, '\\`')}\`)" class="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">
+                                    <i data-lucide="edit-3" class="w-4 h-4"></i> Prepare & Approve
+                                </button>
+                                <button onclick="rejectNomination('${nom.id}')" class="text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">
+                                    Reject (Ineligible)
+                                </button>
+                            </div>
+                        </div>`;
+                    }
+                }).join('') + `</div>`;
+            }
+
+            return `
+            <div class="space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="shield-check" class="w-6 h-6 text-indigo-600"></i> HR Validation & Redaction
+                        </h2>
+                        <p class="text-slate-500 mt-1">Review nominations, ensure eligibility, and redact identifying info for blind voting.</p>
+                    </div>
+                    <div class="bg-slate-100 px-4 py-2 rounded-lg text-sm font-medium text-slate-600">
+                        Pending: ${pending.length}
+                    </div>
                 </div>
-              ) : (
-                <div className="text-center py-10">
-                  <p className="text-slate-400 italic">Winner Pending</p>
+                ${content}
+            </div>`;
+        }
+
+        function renderLeaderBoard() {
+            const approved = getApprovedNominations();
+
+            const categoriesHtml = CATEGORIES.map(category => {
+                const catNoms = approved.filter(n => n.categoryId === category.id);
+                
+                let nomsHtml = '';
+                if (catNoms.length === 0) {
+                    nomsHtml = `<p class="text-slate-400 italic text-sm">No approved nominations for this category yet.</p>`;
+                } else {
+                    nomsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">` + catNoms.map((nom, idx) => `
+                        <div class="border border-slate-200 rounded-lg p-5 relative group hover:border-indigo-300 transition-colors">
+                            <div class="flex justify-between items-start mb-3">
+                                <span class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">Candidate ${idx + 1}</span>
+                                <div class="text-sm font-semibold text-slate-500 flex items-center gap-1">
+                                    <i data-lucide="bar-chart-3" class="w-4 h-4"></i> ${nom.votes} Votes
+                                </div>
+                            </div>
+                            <p class="text-slate-700 text-sm mb-5 italic">"${nom.redactedReason}"</p>
+                            <button onclick="voteCandidate('${nom.id}')" class="w-full bg-white border border-indigo-600 text-indigo-600 font-medium py-2 rounded-md hover:bg-indigo-50 transition-colors">
+                                Vote for Candidate ${idx + 1}
+                            </button>
+                        </div>
+                    `).join('') + `</div>`;
+                }
+
+                return `
+                <div class="mb-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                        <h3 class="text-lg font-bold text-slate-800">${category.name}</h3>
+                        <p class="text-sm text-slate-500">${category.desc}</p>
+                    </div>
+                    <div class="p-6">${nomsHtml}</div>
+                </div>`;
+            }).join('');
+
+            return `
+            <div class="space-y-6">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="eye-off" class="w-6 h-6 text-indigo-600"></i> Blind Voting Board
+                    </h2>
+                    <p class="text-slate-500 mt-1">Review redacted nominations and vote for the best candidate in each category.</p>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                ${categoriesHtml}
+            </div>`;
+        }
 
-      {approvedNominations.length > 0 && (
-        <div className="mt-12 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-             <Users className="w-5 h-5 text-indigo-500" />
-             Honorable Mentions (All Eligible Nominations)
-           </h3>
-           <p className="text-sm text-slate-500 mb-4">Per SOP guidelines, all great work should be identified. Here are all validated nominees:</p>
-           
-           <div className="flex flex-wrap gap-2">
-             {Array.from(new Set(approvedNominations.map(n => n.nomineeId))).map(empId => {
-               const emp = EMPLOYEES.find(e => e.id === empId);
-               return (
-                 <span key={empId} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-full text-sm font-medium border border-slate-200">
-                   {emp?.name}
-                 </span>
-               )
-             })}
-           </div>
-        </div>
-      )}
-    </div>
-  );
+        function renderResults() {
+            const winners = getWinnersByCategory();
+            const approved = getApprovedNominations();
 
-  // --- MAIN LAYOUT ---
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      {/* Header & Nav */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <Trophy className="w-8 h-8 text-indigo-600" />
-              <span className="text-xl font-extrabold tracking-tight text-slate-900">Wego MVP</span>
-            </div>
-            
-            {/* Dev/Demo Controls */}
-            <div className="flex items-center gap-4 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
-              <select 
-                value={currentUser.id}
-                onChange={(e) => setCurrentUser(EMPLOYEES.find(emp => emp.id === e.target.value))}
-                className="text-xs bg-white border border-slate-300 rounded px-2 py-1 font-medium text-slate-700"
-              >
-                {EMPLOYEES.map(emp => <option key={emp.id} value={emp.id}>Act as: {emp.name}</option>)}
-              </select>
-              
-              <div className="flex gap-1">
-                {['Employee', 'HR Admin', 'Leader', 'Results'].map(role => (
-                  <button
-                    key={role}
-                    onClick={() => setActiveRole(role)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${activeRole === role ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200'}`}
-                  >
-                    {role}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+            const winnersHtml = CATEGORIES.map(category => {
+                const winnerNom = winners[category.id];
+                const winnerEmp = winnerNom ? EMPLOYEES.find(e => e.id === winnerNom.nomineeId) : null;
 
-      {/* Main Content Area */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        
-        {/* Context Header based on Role */}
-        <div className="mb-8 border-b border-slate-200 pb-4">
-          <h1 className="text-3xl font-bold text-slate-900">
-            {activeRole === 'Employee' && `Welcome, ${currentUser.name}`}
-            {activeRole === 'HR Admin' && 'HR Operations Dashboard'}
-            {activeRole === 'Leader' && 'Function Leader Voting'}
-            {activeRole === 'Results' && 'Bi-Annual Awards Celebration'}
-          </h1>
-          <p className="text-slate-500 mt-1">
-            {activeRole === 'Employee' && 'Participate in the bi-annual RnR cycle.'}
-            {activeRole === 'HR Admin' && 'Validate entries based on SOP30 Guidelines.'}
-            {activeRole === 'Leader' && 'Review blind applications to remove bias.'}
-            {activeRole === 'Results' && 'Recognizing excellence across all departments.'}
-          </p>
-        </div>
+                if (winnerEmp) {
+                    return `
+                    <div class="rounded-2xl p-6 shadow-sm border relative overflow-hidden bg-gradient-to-b from-white to-amber-50 border-amber-200">
+                        <div class="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1 shadow-sm">
+                            <i data-lucide="award" class="w-3 h-3"></i> $300 Prize
+                        </div>
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">${category.name}</h3>
+                        <div class="text-center py-4">
+                            <div class="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-md">
+                                <span class="text-2xl font-bold text-indigo-600">${winnerEmp.name.charAt(0)}</span>
+                            </div>
+                            <h4 class="text-xl font-bold text-slate-900">${winnerEmp.name}</h4>
+                            <p class="text-sm text-slate-500 mb-4">${winnerEmp.role}</p>
+                            <div class="bg-white/60 p-3 rounded-lg text-sm text-slate-700 italic border border-amber-100 line-clamp-3">"${winnerNom.reason}"</div>
+                        </div>
+                    </div>`;
+                } else {
+                    return `
+                    <div class="rounded-2xl p-6 shadow-sm border relative overflow-hidden bg-white border-slate-200">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">${category.name}</h3>
+                        <div class="text-center py-10">
+                            <p class="text-slate-400 italic">Winner Pending</p>
+                        </div>
+                    </div>`;
+                }
+            }).join('');
 
-        {/* Dynamic Views */}
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {activeRole === 'Employee' && renderEmployeeView()}
-          {activeRole === 'HR Admin' && renderHRView()}
-          {activeRole === 'Leader' && renderLeaderBoard()}
-          {activeRole === 'Results' && renderResults()}
-        </div>
+            let mentionsHtml = '';
+            if (approved.length > 0) {
+                const uniqueNomineeIds = [...new Set(approved.map(n => n.nomineeId))];
+                mentionsHtml = `
+                <div class="mt-12 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <i data-lucide="users" class="w-5 h-5 text-indigo-500"></i> Honorable Mentions (All Eligible Nominations)
+                    </h3>
+                    <p class="text-sm text-slate-500 mb-4">Per SOP guidelines, all great work should be identified. Here are all validated nominees:</p>
+                    <div class="flex flex-wrap gap-2">
+                        ${uniqueNomineeIds.map(empId => {
+                            const emp = EMPLOYEES.find(e => e.id === empId);
+                            return `<span class="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-full text-sm font-medium border border-slate-200">${emp?.name}</span>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }
 
-      </main>
-    </div>
-  );
-}
+            return `
+            <div class="space-y-6">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-extrabold text-slate-900 flex items-center justify-center gap-3">
+                        <i data-lucide="trophy" class="w-8 h-8 text-yellow-500"></i> Wego MVP Awards
+                    </h2>
+                    <p class="text-slate-500 mt-2 max-w-xl mx-auto">Celebrating the outstanding contributions of our team members. Each winner receives a $300 reward!</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    ${winnersHtml}
+                </div>
+                ${mentionsHtml}
+            </div>`;
+        }
+
+        // --- MAIN RENDERER ---
+        function render() {
+            const app = document.getElementById('app');
+            let mainContent = '';
+
+            switch (state.activeRole) {
+                case 'Employee': mainContent = renderEmployeeView(); break;
+                case 'HR Admin': mainContent = renderHRView(); break;
+                case 'Leader': mainContent = renderLeaderBoard(); break;
+                case 'Results': mainContent = renderResults(); break;
+            }
+
+            app.innerHTML = `
+                ${renderHeader()}
+                <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+                    ${renderContext()}
+                    <div class="animate-in">
+                        ${mainContent}
+                    </div>
+                </main>
+            `;
+
+            // Re-initialize icons after DOM update
+            lucide.createIcons();
+        }
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            render();
+        });
+    </script>
+</body>
+</html>
